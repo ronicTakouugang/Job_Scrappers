@@ -1,49 +1,93 @@
+"""Point d'entrée de l'ETL — orchestre les couches bronze -> silver -> gold.
+
+Usage:
+    python main.py --stage silver   # fusion + nettoyage
+    python main.py --stage gold     # enrichissement
+    python main.py --stage all      # bronze (si --with-bronze) + silver + gold
+
+Chaque couche est aussi chargée dans data/warehouse.db (SQLite), sous les
+tables bronze_offres / silver_offres / gold_offres, requêtables en SQL.
+La couche gold est en plus modélisée en schéma en étoile (fact_offres +
+dimensions), voir src/gold/star_schema.py.
+"""
+import argparse
 import os
-from src.scrapers.scraper_apec import get_apec_offers
-from src.scrapers.scraper_francetravail import main as francetravail_main
-from src.scrapers.scraper_wttj import main as wttj_main
-from src.data_processing.merge_data import main as merge_data_main
-from src.data_processing.clean_data import clean_data
-from src.data_processing.enrich_data import main as enrich_data_main
 
-# Définition centralisée du PROJECT_ROOT et DATA_DIR
-PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.path.join(PROJECT_ROOT, "data")
+import pandas as pd
 
-def run_scrapers(data_dir_arg):
-    print("--- Lancement des scrapers ---")
-    get_apec_offers(data_dir_arg)
-    francetravail_main(data_dir_arg)
-    wttj_main(data_dir_arg)
-    print("--- Scraping terminé ---")
+from src.bronze.scraper_adzuna import run_adzuna_scraper
+from src.bronze.scraper_apec import run_apec_scraper
+from src.bronze.scraper_francetravail import run_francetravail_scraper
+from src.config import BRONZE_DIR, GOLD_DIR, SILVER_DIR
+from src.gold.enrich import enrich_offers
+from src.gold.star_schema import build_star_schema
+from src.silver.clean import clean_offers
+from src.silver.merge import merge_bronze_sources
+from src.warehouse import load_table
 
-def run_data_processing(data_dir_arg):
-    print("--- Lancement du traitement des données ---")
-    
-    # 1. Fusion des données brutes
-    print("\n--- Fusion des données brutes ---")
-    merge_data_main(data_dir_arg)
 
-    # 2. Nettoyage des données
-    print("\n--- Nettoyage des données ---")
-    input_clean_path = os.path.join(data_dir_arg, "offres_raw_merged.csv")
-    output_clean_path = os.path.join(data_dir_arg, "offres_clean.csv")
-    clean_data(input_clean_path, output_clean_path)
+def run_bronze():
+    print("--- BRONZE : lancement des scrapers ---")
+    run_apec_scraper(BRONZE_DIR)
+    run_francetravail_scraper(BRONZE_DIR)
+    run_adzuna_scraper(BRONZE_DIR)
+    print("--- BRONZE : terminé ---")
 
-    # 3. Enrichissement des données
-    print("\n--- Enrichissement des données ---")
-    enrich_data_main(data_dir_arg)
-    
-    print("--- Traitement des données terminé ---")
+
+def run_silver():
+    print("--- SILVER : fusion des sources brutes ---")
+    merge_bronze_sources(BRONZE_DIR, SILVER_DIR)
+    merged_path = os.path.join(SILVER_DIR, "offres_raw_merged.csv")
+    load_table(pd.read_csv(merged_path), "bronze_offres")
+
+    print("\n--- SILVER : nettoyage et standardisation ---")
+    clean_path = os.path.join(SILVER_DIR, "offres_clean.csv")
+    clean_offers(merged_path, clean_path)
+    load_table(pd.read_csv(clean_path), "silver_offres")
+    print("--- SILVER : terminé ---")
+
+
+def run_gold():
+    print("--- GOLD : enrichissement métier ---")
+    enrich_offers(SILVER_DIR, GOLD_DIR)
+    enriched_path = os.path.join(GOLD_DIR, "offres_enriched.csv")
+    df_enriched = pd.read_csv(enriched_path)
+    load_table(df_enriched, "gold_offres")
+
+    print("--- GOLD : construction du schéma en étoile (fait + dimensions) ---")
+    build_star_schema(df_enriched)
+    print("--- GOLD : terminé ---")
+
 
 def main():
-    print("--- Démarrage du processus complet ---")
-    # Créer le dossier data s'il n'existe pas
-    os.makedirs(DATA_DIR, exist_ok=True)
-    
-    # run_scrapers(DATA_DIR) # Commented out as requested
-    run_data_processing(DATA_DIR)
-    print("--- Processus complet terminé ---")
+    parser = argparse.ArgumentParser(description="ETL Job Market Data Science (architecture médaillon).")
+    parser.add_argument(
+        "--stage", choices=["bronze", "silver", "gold", "all"], default="all",
+        help="Étape du pipeline à exécuter (défaut: all).",
+    )
+    parser.add_argument(
+        "--with-bronze", action="store_true",
+        help="Avec --stage all, relance aussi le scraping (lent, soumis à l'anti-bot). Ignoré sinon.",
+    )
+    args = parser.parse_args()
+
+    for directory in (BRONZE_DIR, SILVER_DIR, GOLD_DIR):
+        os.makedirs(directory, exist_ok=True)
+
+    if args.stage == "bronze":
+        run_bronze()
+    elif args.stage == "silver":
+        run_silver()
+    elif args.stage == "gold":
+        run_gold()
+    elif args.stage == "all":
+        if args.with_bronze:
+            run_bronze()
+        else:
+            print("--- BRONZE ignoré (passer --with-bronze pour relancer le scraping) ---")
+        run_silver()
+        run_gold()
+
 
 if __name__ == "__main__":
     main()

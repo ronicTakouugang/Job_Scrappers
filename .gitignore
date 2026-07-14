@@ -1,6 +1,5 @@
 # Secrets
 .env
-src/.env
 
 # Python
 __pycache__/
@@ -16,5 +15,17 @@ venv/
 # IDE
 .idea/
 
-# Selenium / webdriver cache
+# Logs de run
 *.log
+
+# Données générées par le pipeline (regénérées à chaque run, pas versionnées)
+data/bronze/*
+data/silver/*
+data/gold/*
+data/warehouse.db
+!data/bronze/.gitkeep
+!data/silver/.gitkeep
+!data/gold/.gitkeep
+
+# pytest
+.pytest_cache/

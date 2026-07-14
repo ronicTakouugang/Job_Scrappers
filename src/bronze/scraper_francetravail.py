@@ -1,35 +1,37 @@
+"""Couche BRONZE — extraction brute des offres France Travail via leur API OAuth2.
+
+Écrit `offres_francetravail_raw.csv` sans transformation métier : le
+nettoyage se fait en couche silver. Nécessite CLIENT_ID/CLIENT_SECRET
+dans le fichier `.env` à la racine du projet (voir `.env.example`).
+"""
 import os
 import time
-import requests
-import pandas as pd
 from datetime import datetime
+
+import pandas as pd
+import requests
 from dotenv import load_dotenv
 
-# Naviguer depuis le script (src/scrapers/scraper_francetravail.py) deux niveaux vers le haut pour la racine du projet
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+from src.config import PROJECT_ROOT
+
 load_dotenv(os.path.join(PROJECT_ROOT, ".env"))
 
 CLIENT_ID = os.getenv("CLIENT_ID")
 CLIENT_SECRET = os.getenv("CLIENT_SECRET")
 
-# Configuration OAuth
 TOKEN_URL = "https://entreprise.francetravail.fr/connexion/oauth2/access_token?realm=/partenaire"
 API_URL = "https://api.francetravail.io/partenaire/offresdemploi/v2/offres/search"
 SCOPE = "api_offresdemploiv2 o2dsoffre"
 
-# Configuration Scraping
-KEYWORDS = [
-    "Data Scientist", "Data Analyst", "Data Engineer", 
+SEARCH_KEYWORDS = [
+    "Data Scientist", "Data Analyst", "Data Engineer",
     "Machine Learning", "Business Intelligence", "Big Data",
-    "Intelligence Artificielle"
+    "Intelligence Artificielle",
 ]
-PAGE_SIZE = 100 # Max range is often 150
-MAX_OFFERS_PER_KEYWORD = 600 # On vise ~2000 total
+PAGE_SIZE = 100
+MAX_OFFERS_PER_KEYWORD = 600  # On vise ~2000 total
 
 TIMEOUT = 15
-
-if not CLIENT_ID or not CLIENT_SECRET:
-    raise RuntimeError("CLIENT_ID ou CLIENT_SECRET manquant dans le fichier .env")
 
 
 def get_token():
@@ -49,24 +51,22 @@ def get_token():
         print(r.text)
         raise
 
+
 def get_offres(token, keyword, start, end):
     headers = {"Authorization": f"Bearer {token}"}
-    params = {
-        "motsCles": keyword,
-        "range": f"{start}-{end}",
-    }
+    params = {"motsCles": keyword, "range": f"{start}-{end}"}
     try:
         r = requests.get(API_URL, headers=headers, params=params, timeout=TIMEOUT)
-        if r.status_code == 200 or r.status_code == 206:
+        if r.status_code in (200, 206):
             return r.json().get("resultats", [])
-        elif r.status_code == 204:
+        if r.status_code == 204:
             return []
-        else:
-            print(f"  Erreur API {r.status_code}: {r.text[:200]}")
-            return []
+        print(f"  Erreur API {r.status_code}: {r.text[:200]}")
+        return []
     except Exception as e:
         print(f"  Exception req: {e}")
         return []
+
 
 def parse_offre(o):
     return {
@@ -75,37 +75,40 @@ def parse_offre(o):
         "contrat": o.get("typeContrat"),
         "localisation": o.get("lieuTravail", {}).get("libelle"),
         "salaire": o.get("salaire", {}).get("libelle"),
-        "description": o.get("description"), # Le champ clé !
+        "description": o.get("description"),
         "lien": o.get("origineOffre", {}).get("urlOrigine"),
         "date_publication": o.get("dateCreation", "")[:10],
         "date_scraping": datetime.now().strftime("%Y-%m-%d"),
         "source": "France Travail",
     }
 
-def main(data_dir_arg):
+
+def run_francetravail_scraper(bronze_dir):
+    if not CLIENT_ID or not CLIENT_SECRET:
+        print("CLIENT_ID ou CLIENT_SECRET manquant dans le fichier .env — scraper France Travail ignoré.")
+        return
+
     try:
         token = get_token()
-    except:
+    except Exception:
         return
 
     all_offers = []
     seen_ids = set()
 
-    for kw in KEYWORDS:
+    for kw in SEARCH_KEYWORDS:
         print(f"--- Recherche: {kw} ---")
-        current_count = 0
-        
-        # Pagination
+
         for start in range(0, MAX_OFFERS_PER_KEYWORD, PAGE_SIZE):
             end = start + PAGE_SIZE - 1
             print(f"  Page {start}-{end}...")
-            
+
             results = get_offres(token, kw, start, end)
-            
+
             if not results:
                 print("  Fin des résultats.")
                 break
-                
+
             new_in_page = 0
             for off in results:
                 off_id = off.get("id")
@@ -113,30 +116,25 @@ def main(data_dir_arg):
                     seen_ids.add(off_id)
                     all_offers.append(parse_offre(off))
                     new_in_page += 1
-            
+
             print(f"  + {new_in_page} nouvelles offres.")
-            current_count += len(results)
-            
+
             if len(results) < PAGE_SIZE:
                 break
-                
-            time.sleep(1) # Poil de politesse
+
+            time.sleep(1)  # Poil de politesse
 
     print(f"Total offres récupérées : {len(all_offers)}")
 
     if all_offers:
-        os.makedirs(data_dir_arg, exist_ok=True)
-        
-        output = os.path.join(data_dir_arg, "offres_francetravail_raw.csv")
-        
-        df = pd.DataFrame(all_offers)
-        # Si fichier existe, on peut merger ou écraser. Ici on écrase pour repartir propre
-        df.to_csv(output, index=False, encoding="utf-8-sig")
+        os.makedirs(bronze_dir, exist_ok=True)
+        output = os.path.join(bronze_dir, "offres_francetravail_raw.csv")
+        pd.DataFrame(all_offers).to_csv(output, index=False, encoding="utf-8-sig")
         print(f"Sauvegarde dans {output}")
     else:
         print("Aucune offre trouvée.")
 
+
 if __name__ == "__main__":
-    PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-    DATA_DIR = os.path.join(PROJECT_ROOT, "data")
-    main(DATA_DIR)
+    from src.config import BRONZE_DIR
+    run_francetravail_scraper(BRONZE_DIR)
