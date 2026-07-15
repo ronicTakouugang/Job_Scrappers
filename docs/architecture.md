@@ -3,6 +3,10 @@
 Ce projet suit une **architecture médaillon** à 3 couches, chacune
 correspondant à un niveau de qualité/structuration croissant des données.
 
+![Architecture haut niveau](archi.png)
+
+Vue détaillée du flux de fichiers/tables, couche par couche :
+
 ```mermaid
 flowchart LR
     subgraph Sources
