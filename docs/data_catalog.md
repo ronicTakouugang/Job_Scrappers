@@ -22,10 +22,24 @@ dataset (voir plus bas).
 | `date_poste` | date (YYYY-MM-DD) | `date_publication` si connue, sinon `date_scraping` |
 | `source` | string | `APEC`, `France Travail` ou `Adzuna` |
 | `lien` | string (URL) | Lien vers l'offre originale |
-| `description` | string | Texte complet de l'offre, nettoyé |
+| `description` | string | Texte de l'offre, nettoyé — **tronqué à la source pour APEC (~283 car.) et Adzuna (~500 car.)**, voir note ci-dessous ; complet pour France Travail (jusqu'à 5000 car.) |
 | `experience_estimee` | string | `Junior`, `Confirmé`, `Senior`, ou `Non précisé` — déduit du texte |
 | `niveau_etude_estime` | string | `Bac+3/4`, `Bac+5`, `PhD`, ou `Non précisé` |
 | `job_category` | string | `Data Scientist`, `Data Engineer`, `Data Analyst`, `Alternance`, `Stage`, `Autre rôle Data`, `Non spécifié` |
+
+### Limite connue : descriptions tronquées (APEC, Adzuna)
+
+Les endpoints de **recherche** (liste) d'APEC et Adzuna renvoient un
+résumé court de l'offre, pas le texte complet — APEC plafonne à ~283
+caractères (écart-type de 2.5, donc une troncature quasi systématique,
+pas juste occasionnelle), Adzuna à 500. Récupérer la description
+complète demanderait un appel par offre sur une page de détail (comme le
+faisait l'ancien scraper WTTJ en 2 phases), non implémenté ici faute de
+temps. Conséquence directe : la détection de compétences (`extract_skills`)
+et la catégorisation de poste ont une recall plus faible sur ces deux
+sources — une compétence mentionnée après le point de troncature n'est
+simplement pas vue. France Travail n'a pas cette limite (description
+complète, jusqu'à 5000 caractères).
 
 ## Colonnes de compétences
 

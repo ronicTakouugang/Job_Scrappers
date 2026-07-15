@@ -51,7 +51,7 @@ def run_gold():
     print("--- GOLD : enrichissement métier ---")
     enrich_offers(SILVER_DIR, GOLD_DIR)
     enriched_path = os.path.join(GOLD_DIR, "offres_enriched.csv")
-    df_enriched = pd.read_csv(enriched_path)
+    df_enriched = pd.read_csv(enriched_path, low_memory=False)
     load_table(df_enriched, "gold_offres")
 
     print("--- GOLD : construction du schéma en étoile (fait + dimensions) ---")

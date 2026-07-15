@@ -66,9 +66,9 @@ SKILL_PATTERNS = {
     # Langages de programmation
     "Python": [r"python"],
     "SQL": [r"sql"],
-    "R": [r"\bR\b", r"RStudio"],
+    "R": [r"\br\b", r"rstudio"],
     "Java": [r"\bjava\b"],
-    "Scala": [r"scala"],
+    "Scala": [r"\bscala\b"],
     "C++": [r"c\+\+"],
     "SAS": [r"\bsas\b"],
     "Matlab": [r"matlab"],
@@ -90,7 +90,9 @@ SKILL_PATTERNS = {
     "Pandas": [r"pandas"],
     "NumPy": [r"numpy"],
     "Scikit-learn": [r"scikit-learn", r"sklearn"],
-    "TensorFlow": [r"tensorflow", r"tf"],
+    # "tf" seul retiré : matchait "pla-tf-orm" dans "data platform" (très
+    # fréquent), un faux positif massif sans rapport avec TensorFlow.
+    "TensorFlow": [r"\btensorflow\b"],
     "PyTorch": [r"pytorch"],
     "Keras": [r"keras"],
     "NLP": [r"nlp", "natural language processing", "traitement automatique du langage"],
@@ -98,7 +100,9 @@ SKILL_PATTERNS = {
 
     # Visualization
     "Power BI": [r"power bi", r"powerbi", r"dax"],
-    "Tableau": [r"tableau"],
+    # Exclut "tableau(x) de bord/croisé/excel/suivi/synthèse", des expressions
+    # françaises génériques bien plus fréquentes que le logiciel Tableau.
+    "Tableau": [r"tableau(?!x?\s+(de|crois|excel|suivi|synth))"],
     "Looker": [r"looker"],
     "Qlik": [r"qlik", r"qliksense", r"qlikview"],
     "Streamlit": [r"streamlit"],
@@ -109,7 +113,7 @@ SKILL_PATTERNS = {
     "GCP": [r"gcp", "google cloud"],
     "Docker": [r"docker"],
     "Kubernetes": [r"kubernetes", r"k8s"],
-    "Git": [r"git", "github", "gitlab"],
+    "Git": [r"\bgit\b", r"github", r"gitlab"],
     "Linux": [r"linux"],
     "CI/CD": [r"ci/cd", "cicd", "jenkins", "gitlab ci"],
 

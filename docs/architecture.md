@@ -57,17 +57,25 @@ page qui peut changer sans préavis.
 
 ## Silver — `src/silver/`
 
+Règle de couche : hygiène et conformité des données, aucune dérivation
+métier basée sur un vocabulaire externe.
+
 1. `merge.py` : concatène les CSV bronze disponibles → `offres_raw_merged.csv`
 2. `clean.py` : déduplique, standardise les types de contrat (`job_type`),
-   déduit la région française à partir de la localisation, estime la
-   séniorité à partir du titre → `offres_clean.csv`
+   déduit la région française à partir de la localisation, **et nettoie le
+   texte** (`sanitize_text` : HTML, espaces, séparateur CSV — pure hygiène,
+   déplacé depuis gold) → `offres_clean.csv`
 
 ## Gold — `src/gold/`
+
+Règle de couche : dérivation métier à partir d'un vocabulaire/référentiel
+(compétences, niveaux d'étude, catégories de poste) — jamais du simple
+nettoyage.
 
 `enrich.py` :
 - détecte ~45 compétences techniques dans la description (regex, voir
   `src/config.py:SKILL_PATTERNS`)
-- estime l'expérience requise et le niveau d'étude
+- estime l'expérience requise (depuis la description) et le niveau d'étude
 - catégorise le poste (Data Scientist / Data Engineer / Data Analyst / ...)
 - produit **`offres_enriched.csv`**, le dataset final (une ligne par offre,
   une colonne par compétence détectée), et `offres_skills_long.csv`, la

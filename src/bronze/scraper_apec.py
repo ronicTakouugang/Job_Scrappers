@@ -96,7 +96,12 @@ def run_apec_scraper(bronze_dir):
                                     "source": "APEC",
                                     "mot_cle_recherche": kw,
                                     "id_apec": off['numeroOffre'],
-                                    "date_publication": off.get("datePublication") or off.get("dateCreation") or None,
+                                    # Tronqué à la date (YYYY-MM-DD) pour rester cohérent avec
+                                    # France Travail/Adzuna : l'API renvoie un datetime avec fuseau
+                                    # horaire ("...T08:24:50.000+0000") qui, mélangé à des dates
+                                    # sans fuseau dans le même parsing pandas, fait échouer silencieusement
+                                    # le parsing de CES AUTRES dates (elles deviennent NaT).
+                                    "date_publication": (off.get("datePublication") or off.get("dateCreation") or "")[:10] or None,
                                 })
 
                         print(f"  Page {page + 1}: +{new_count} nouvelles offres (Total unique: {len(all_offers)})")

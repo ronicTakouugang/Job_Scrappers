@@ -13,8 +13,18 @@ from src.config import ADZUNA_CONTRACT_MAP, APEC_CONTRACT_CODES, IDF_POSTAL_PREF
 FINAL_COLUMNS = [
     "titre", "entreprise", "job_type", "localisation", "is_remote_job",
     "region", "country", "salaire", "description", "lien", "date_scraping",
-    "date_publication", "seniorite", "mot_cle_recherche", "source",
+    "date_publication", "mot_cle_recherche", "source",
 ]
+
+
+def sanitize_text(text):
+    """Nettoyage de texte pur (aucune règle métier) : HTML, espaces, séparateur CSV."""
+    if not isinstance(text, str):
+        return ""
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = text.replace("\n", " ").replace("\r", " ").replace("\t", " ")
+    text = text.replace(";", ",")  # évite les conflits avec le séparateur CSV
+    return re.sub(r"\s+", " ", text).strip()
 
 
 def standardise_contrat(raw_value):
@@ -91,21 +101,6 @@ def clean_and_categorize_location(row):
     )
 
 
-def get_seniorite(titre):
-    if pd.isna(titre):
-        return "Non précisé"
-    titre = str(titre).lower()
-    if "senior" in titre or "lead" in titre or "principal" in titre:
-        return "Senior"
-    if "junior" in titre or "débutant" in titre:
-        return "Junior"
-    if "manager" in titre or "head" in titre or "directeur" in titre:
-        return "Manager"
-    if "alternance" in titre or "alternant" in titre or "stage" in titre:
-        return "Junior"
-    return "Confirmé"
-
-
 def clean_offers(input_path, output_path):
     print(f"Début du nettoyage des données depuis: {input_path}")
     df = pd.read_csv(input_path)
@@ -139,17 +134,15 @@ def clean_offers(input_path, output_path):
     )
     df.rename(columns={"localisation_clean": "localisation"}, inplace=True)
 
-    # 5. Ajouter une colonne séniorité
-    df["seniorite"] = df["titre"].apply(get_seniorite)
-
-    # 6. Nettoyage des titres (supprimer balises HTML résiduelles)
-    df["titre"] = df["titre"].str.replace(r"<.*?>", "", regex=True).str.strip()
+    # 5. Nettoyage de texte (HTML, espaces) — hygiène pure, pas de règle métier
+    df["titre"] = df["titre"].apply(sanitize_text)
+    df["entreprise"] = df["entreprise"].apply(sanitize_text)
+    df["description"] = df["description"].apply(sanitize_text)
 
     # Résumé final
     print(f"\naprès nettoyage: {len(df)} lignes")
     print(f"\ndistribution job_type:\n{df['job_type'].value_counts()}")
     print(f"\ndistribution régions:\n{df['region'].value_counts()}")
-    print(f"\ndistribution séniorité:\n{df['seniorite'].value_counts()}")
     print(f"\ndistribution is_remote_job:\n{df['is_remote_job'].value_counts()}")
 
     for col in FINAL_COLUMNS:

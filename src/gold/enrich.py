@@ -83,13 +83,18 @@ def categorize_job_role(title, description, job_type):
     if "stage" in job_type_lower or "stagiaire" in title_lower:
         return "Stage"
 
-    if re.search(r"data scientist|scientifique de données|science des données", title_lower) or (
+    if re.search(r"data scientist|scientifique de données|science des données|ingénieur ia\b|\bai engineer\b", title_lower) or (
         re.search(r"machine learning|apprentissage automatique|ia|intelligence artificielle|deep learning", description_lower)
         and re.search(r"modélisation|statistique|algorithme|prédict", description_lower)
     ):
         return "Data Scientist"
 
-    if re.search(r"data engineer|ingénieur données|ingénieur big data|devops data", title_lower) or re.search(
+    # "ingénieur data" (sans accent, très courant) en plus de "ingénieur données"
+    if re.search(
+        r"data engineer|ingénieur données|ingénieur.{0,3}data\b|ingénieur big data|devops data"
+        r"|architecte data|data architect|analytics engineer|tech lead data",
+        title_lower,
+    ) or re.search(
         r"etl|pipeline de données|entrepôt de données|data warehouse|flux de données|spark|hadoop|kafka|airflow", description_lower
     ):
         return "Data Engineer"
@@ -129,16 +134,14 @@ def recover_missing_fields(row):
                 row["localisation"] = keyword.title()
                 break
 
+    # La couche silver ne détecte le télétravail que via le champ
+    # localisation structuré ; nos 3 sources n'y mettent quasi jamais un
+    # signal remote (c'est mentionné dans la description à la place), donc
+    # is_remote_job y était toujours False. On complète ici avec le texte.
+    if not row.get("is_remote_job") and any(k in desc for k in REMOTE_KEYWORDS):
+        row["is_remote_job"] = True
+
     return row
-
-
-def sanitize_text(text):
-    if not isinstance(text, str):
-        return ""
-    text = re.sub(r"<[^>]+>", " ", text)
-    text = text.replace("\n", " ").replace("\r", " ").replace("\t", " ")
-    text = text.replace(";", ",")  # évite les conflits avec le séparateur CSV
-    return re.sub(r"\s+", " ", text).strip()
 
 
 def enrich_offers(silver_dir, gold_dir):
@@ -152,10 +155,12 @@ def enrich_offers(silver_dir, gold_dir):
     print(f"Chargement de {input_path}...")
     df = pd.read_csv(input_path)
 
-    print("Nettoyage des champs texte et récupération des données manquantes...")
-    df["description"] = df["description"].fillna("").astype(str).apply(sanitize_text)
-    df["titre"] = df["titre"].fillna("").astype(str).apply(sanitize_text)
-    df["entreprise"] = df["entreprise"].fillna("").astype(str).apply(sanitize_text)
+    # Le texte (HTML, espaces) est déjà nettoyé par la couche silver ;
+    # ici on ne fait que compléter les champs manquants depuis la description.
+    print("Récupération des données manquantes...")
+    df["description"] = df["description"].fillna("")
+    df["titre"] = df["titre"].fillna("")
+    df["entreprise"] = df["entreprise"].fillna("")
     df = df.apply(recover_missing_fields, axis=1)
 
     nb_desc = df[df["description"].str.len() > 20].shape[0]
